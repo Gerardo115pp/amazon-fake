@@ -1,9 +1,9 @@
 <script>
-    import { FieldStates } from '../classes/FieldData'
-    import Button from '../components/Button.svelte';
-    import Input from '../components/Input.svelte';
-    import FieldData from '../classes/FieldData';
-    import { server_name } from '../server_info';
+    import { FieldStates } from '../../classes/FieldData'
+    import Button from '../../components/Button.svelte';
+    import Input from '../../components/Input.svelte';
+    import FieldData from '../../classes/FieldData';
+    import { server_name } from '../../server_info';
     import { push } from 'svelte-spa-router';
     
     let form_inputs = [

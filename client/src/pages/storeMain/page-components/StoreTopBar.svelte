@@ -1,6 +1,6 @@
 <script>
     
-    import user_profile_logo from '../resources/man.svg';
+    import user_profile_logo from '../../../resources/man.svg';
     import { push } from 'svelte-spa-router';
 
     export let session_key = "";

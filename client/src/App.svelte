@@ -9,7 +9,7 @@
     :global(:root) {
         --theme-color: #78ebff;
         --dimtheme-color: #acf5fc;
-        --theme-gradiant: linear-gradient(90.58deg, #78ebff 7.24%, #00c3ff 93.27%);;
+        --theme-gradiant: linear-gradient(115.58deg, #78ebff 7.24%, #00c3ff 93.27%);;
         --dark-color: #ffffff;
         --danger:#e72d2d;
         --ready:#acfd50;

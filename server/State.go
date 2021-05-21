@@ -7,13 +7,15 @@ import (
 )
 
 const USERS_TAG = "users"
+const PRODUCTS_TAG = "products"
 const SERVER_DATA_TAG = "server_data"
 
 type State struct {
-	users        *List
-	storage_file *RandomAccessFile
-	last_user_id uint
-	last_item_id uint
+	users           *List
+	products        *List
+	storage_file    *RandomAccessFile
+	last_user_id    uint
+	last_product_id uint
 }
 
 func (self *State) clearState() {
@@ -22,6 +24,17 @@ func (self *State) clearState() {
 
 func (self *State) composeTag(content string, tag_name string) string {
 	return fmt.Sprintf("<%s>%s</%s>", tag_name, content, tag_name)
+}
+
+func (self *State) getAllProducts() string {
+	var all_products []string = self.products.mapFunc(func(ln *ListNode) string {
+		if ln.NodeContent.(*Product).isAvaliable() {
+			return ln.NodeContent.toJson()
+		} else {
+			return ""
+		}
+	})
+	return fmt.Sprintf("[%s]", strings.Join(all_products, ","))
 }
 
 func (self *State) getPairTags(tag_name string) (*MatchRange, *MatchRange) {
@@ -33,6 +46,11 @@ func (self *State) getPairTags(tag_name string) (*MatchRange, *MatchRange) {
 func (self *State) getNewUserId() uint {
 	self.last_user_id++
 	return self.last_user_id
+}
+
+func (self *State) getNewProductId() uint {
+	self.last_product_id++
+	return self.last_product_id
 }
 
 func (self *State) getTagContent(tag_name string) string {
@@ -49,15 +67,32 @@ func (self *State) getUserByUsername(username string) *User {
 	return c.(*User)
 }
 
+func (self *State) getProductsByVendor(vendor_id uint) string {
+	var vendor_products []string
+	for current_node := self.products.root; current_node != nil; current_node = current_node.Next {
+		if current_node.NodeContent.(*Product).vendor == vendor_id {
+			vendor_products = append(vendor_products, current_node.NodeContent.toJson())
+		}
+	}
+	return fmt.Sprintf("[%s]", strings.Join(vendor_products, ","))
+}
+
 func (self *State) insertUser(new_user *User) error {
 	if other := self.users.exists(new_user.toString()); other == nil {
 		self.users.append(new_user)
-		if err := self.saveUsers(); err != nil {
+		if err := self.saveTag(self.users, USERS_TAG); err != nil {
 			logFatal(err)
 		}
 		return nil
 	} else {
 		return fmt.Errorf("User '%s' already exists", new_user.toString())
+	}
+}
+
+func (self *State) insertProduct(new_product *Product) {
+	self.products.append(new_product)
+	if err := self.saveTag(self.products, PRODUCTS_TAG); err != nil {
+		logFatal(err)
 	}
 }
 
@@ -67,6 +102,8 @@ func (self *State) loadState() error {
 		return err
 	} else if err = self.loadServerData(); err != nil {
 		return err
+	} else if err = self.loadProducts(); err != nil {
+		logFatal(err)
 	}
 	return err
 }
@@ -79,7 +116,7 @@ func (self *State) loadServerData() error {
 	}{}
 	err := json.Unmarshal([]byte(server_data), server_data_json)
 	self.last_user_id = uint(server_data_json.LastUserID)
-	self.last_item_id = uint(server_data_json.LastItemID)
+	self.last_product_id = uint(server_data_json.LastItemID)
 	return err
 }
 
@@ -100,6 +137,23 @@ func (self *State) loadUsers() (err error) {
 	return
 }
 
+func (self *State) loadProducts() (err error) {
+	var users_data string = self.getTagContent(PRODUCTS_TAG)
+	var current_product *Product
+	if users_data != "" {
+		for _, rstring := range strings.Split(users_data, "*") {
+			current_product = new(Product)
+			if err = current_product.load(rstring); err != nil {
+				fmt.Printf("Warning rstring '%s' couldnt be loaded...\n", rstring)
+				continue
+			}
+			self.products.append(current_product)
+		}
+	}
+	fmt.Println("Products loaded:", self.products.length)
+	return
+}
+
 func (self *State) startState(root_user *User) {
 	self.clearState()
 	self.users.append(root_user)
@@ -111,7 +165,7 @@ func (self *State) saveServerData() error {
 	server_data := &struct {
 		LastUserID int `json:"last_user_id"`
 		LastItemID int `json:"last_item_id"`
-	}{LastUserID: int(self.last_user_id), LastItemID: int(self.last_item_id)}
+	}{LastUserID: int(self.last_user_id), LastItemID: int(self.last_product_id)}
 	json_data, err := json.Marshal(server_data)
 	if err != nil {
 		fmt.Println(err)
@@ -121,13 +175,17 @@ func (self *State) saveServerData() error {
 	return nil
 }
 
-func (self *State) saveUsers() error {
-	fmt.Printf("Saving %d users\n", self.users.length)
-	var open_tag, close_tag *MatchRange = self.getPairTags(USERS_TAG)
-	var users_serialized []string = self.users.mapFunc(func(ln *ListNode) string { return ln.NodeContent.toRstring() })
+func (self *State) saveTag(state_list *List, tag_name string) error {
+	fmt.Printf("Saving %d %s\n", self.users.length, tag_name)
+	var open_tag, close_tag *MatchRange = self.getPairTags(tag_name)
+	if open_tag.right != -1 && close_tag.right != -1 {
+		var tag_serialized []string = state_list.mapFunc(func(ln *ListNode) string { return ln.NodeContent.toRstring() })
 
-	self.saveServerData()
-	return self.saveContentToRAF(open_tag, close_tag, self.composeTag(strings.Join(users_serialized, "*"), USERS_TAG))
+		self.saveServerData()
+		return self.saveContentToRAF(open_tag, close_tag, self.composeTag(strings.Join(tag_serialized, "*"), tag_name))
+	} else {
+		return fmt.Errorf("tag '%s' doesnt exists", tag_name)
+	}
 }
 
 func (self *State) saveContentToRAF(open_tag *MatchRange, close_tag *MatchRange, content string) error {
@@ -157,7 +215,7 @@ func (self *State) saveContentToRAF(open_tag *MatchRange, close_tag *MatchRange,
 func createState() *State {
 	var new_state *State = new(State)
 	new_state.users = new(List)
-
+	new_state.products = new(List)
 	new_state.storage_file = createRAF("store")
 
 	return new_state

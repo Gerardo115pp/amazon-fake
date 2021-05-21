@@ -77,4 +77,6 @@
 </style>
 
 <div style="width: {width};" on:click={isEnabled ?  onClick : ()=>{}}
-    class={composeClassName()}>{label}</div>
+    class={composeClassName()}>
+        {label}
+</div>

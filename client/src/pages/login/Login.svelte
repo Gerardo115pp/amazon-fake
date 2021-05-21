@@ -1,10 +1,10 @@
 <script>
-    import Button from '../components/Button.svelte';
-    import Input from '../components/Input.svelte';
-    import store_logo from '../resources/shops.svg';
-    import FieldData from '../classes/FieldData';
-    import { FieldStates } from '../classes/FieldData';
-    import { server_name } from '../server_info';
+    import Button from '../../components/Button.svelte';
+    import Input from '../../components/Input.svelte';
+    import store_logo from '../../resources/shops.svg';
+    import FieldData from '../../classes/FieldData';
+    import { FieldStates } from '../../classes/FieldData';
+    import { server_name } from '../../server_info';
     import { push } from 'svelte-spa-router';
     
     let username_field = new FieldData("login-user", /^[@A-Za-z_\d]+$/, "username");

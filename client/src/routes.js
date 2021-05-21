@@ -1,7 +1,7 @@
-import Login from './pages/Login.svelte';
-import SignUp from './pages/SignUp.svelte';
-import Store from './pages/StoreMainView.svelte';
-import UserProfile from './pages/UserProfile.svelte';
+import Login from './pages/login/Login.svelte';
+import SignUp from './pages/signUp/SignUp.svelte';
+import Store from './pages/storeMain/StoreMainView.svelte';
+import UserProfile from './pages/userProfile/UserProfile.svelte';
 
 
 const routes = {

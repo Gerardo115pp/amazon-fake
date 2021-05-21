@@ -2,10 +2,15 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
+	"mime/multipart"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 )
+
+const PRODUCT_IMAGES_DIRECTORY = "./product_images"
 
 type Server struct {
 	port     string
@@ -20,6 +25,17 @@ func (self *Server) createSession(user *User, request *http.Request) uint64 {
 	var session_key uint64 = shaAsInt64(fmt.Sprintf("%s:%s", user.username, request.RemoteAddr))
 	self.sessions[session_key] = user
 	return session_key
+}
+
+func (self *Server) createProductFromRequest(request *http.Request) *Product {
+	var new_product *Product = new(Product)
+	new_product.id = self.state.getNewProductId()
+	new_product.name = request.FormValue("name")
+	new_product.description = request.FormValue("description")
+	new_product.stock = stringToInt(request.FormValue("stock"))
+	new_product.price = stringToInt(request.FormValue("price"))
+	new_product.images = make([]string, 0)
+	return new_product
 }
 
 func (self *Server) createUserFromRequest(request *http.Request) *User {
@@ -80,6 +96,20 @@ func (self *Server) getSessionKey(request *http.Request) (uint64, error) {
 	}
 }
 
+func (self *Server) getUserFromRequest(request *http.Request) (*User, error) {
+	var sk string = request.Header.Get("X-sk")
+	if sk != "" {
+		var session_key uint64 = stringToUint64(sk)
+		if user, exists := self.sessions[session_key]; exists {
+			return user, nil
+		} else {
+			return nil, fmt.Errorf("Users doesnt exists")
+		}
+	} else {
+		return nil, fmt.Errorf("The user your looking for is not where you think it is...")
+	}
+}
+
 func (self *Server) handleRegister(response http.ResponseWriter, request *http.Request) {
 	if request.Method == http.MethodPost {
 		var new_user *User = self.createUserFromRequest(request)
@@ -96,6 +126,53 @@ func (self *Server) handleRegister(response http.ResponseWriter, request *http.R
 	} else {
 		response.WriteHeader(http.StatusMethodNotAllowed)
 		response.Write(self.composeError(fmt.Sprintf("Method '%s' is not allowed", request.Method)))
+	}
+}
+
+func (self *Server) handleProduct(response http.ResponseWriter, request *http.Request) {
+	var vendor *User
+	vendor, _ = self.getUserFromRequest(request)
+	switch request.Method {
+	case http.MethodGet:
+		var user_selector string = request.FormValue("id")
+		if user_selector == "*" {
+			response.WriteHeader(200)
+			fmt.Fprint(response, self.state.getAllProducts())
+		} else if user_selector == "" {
+			var vendor_products string = self.state.getProductsByVendor(vendor.id)
+			response.WriteHeader(200)
+			fmt.Fprint(response, vendor_products)
+		}
+	case http.MethodPost:
+		var new_product *Product = self.createProductFromRequest(request)
+		var filename string
+
+		new_product.vendor = vendor.id
+		var file_counter int = 0
+
+		for {
+			file, header, err := request.FormFile(fmt.Sprintf("image-%d", file_counter))
+			if err != nil {
+				break
+			}
+			filename = fmt.Sprintf("%s_%d_%d%s", new_product.name, vendor.id, file_counter, filepath.Ext(header.Filename))
+			if err = self.saveFile(file, filename); err != nil {
+				fmt.Println("Warning:", err.Error())
+				continue
+			}
+			new_product.images = append(new_product.images, filename)
+			file_counter++
+		}
+
+		self.state.insertProduct(new_product)
+		response.WriteHeader(200)
+		response.Write(self.ok)
+	case http.MethodOptions:
+		response.WriteHeader(200)
+		response.Write(self.ok)
+	default:
+		response.WriteHeader(http.StatusMethodNotAllowed)
+		response.Write(self.composeError("not allowed"))
 	}
 }
 
@@ -150,6 +227,21 @@ func (self *Server) login(response http.ResponseWriter, request *http.Request) {
 	}
 }
 
+func (self *Server) logout(response http.ResponseWriter, request *http.Request) {
+	if request.Method == http.MethodPatch {
+		var session_key uint64
+		session_key, _ = self.getSessionKey(request)
+		delete(self.sessions, session_key)
+		fmt.Printf("Session %d was finished\n", session_key)
+		response.WriteHeader(200)
+		response.Write(self.ok)
+	} else {
+		fmt.Println("Wrong method, user was not logged out")
+		response.WriteHeader(http.StatusNotModified)
+		response.Write(self.composeError("nope"))
+	}
+}
+
 func (self *Server) registerUser(response http.ResponseWriter, request *http.Request) {
 	if self.state.users.length == 0 {
 		user_data := strings.Split(request.URL.Path, "-")
@@ -174,6 +266,19 @@ func (self *Server) sessionExists(sk string) bool {
 	return exists
 }
 
+func (self *Server) saveFile(file multipart.File, filename string) error {
+	data, err := ioutil.ReadAll(file)
+	if err != nil {
+		return err
+	}
+	if !pathExists(PRODUCT_IMAGES_DIRECTORY) {
+		if err = os.Mkdir(PRODUCT_IMAGES_DIRECTORY, 0755); err != nil {
+			return err
+		}
+	}
+	return ioutil.WriteFile(fmt.Sprintf("%s/%s", PRODUCT_IMAGES_DIRECTORY, filename), data, 0666)
+}
+
 func (self *Server) validateSession(handler func(http.ResponseWriter, *http.Request)) func(http.ResponseWriter, *http.Request) {
 	return func(response http.ResponseWriter, request *http.Request) {
 		var session_key string = request.Header.Get("X-sk")
@@ -195,8 +300,10 @@ func (self *Server) run() {
 	self.router.registerRoute(NewRoute("/", true), self.enableCors(self.greet))
 	self.router.registerRoute(NewRoute(`/register-root-[a-z\d]{3,8}-[a-z\d]+`, false), (self.registerUser))
 	self.router.registerRoute(NewRoute("/register", true), self.enableCors(self.handleRegister))
+	self.router.registerRoute(NewRoute("/products", true), self.enableCors(self.validateSession(self.handleProduct)))
 	self.router.registerRoute(NewRoute("/user", true), self.enableCors(self.validateSession(self.handleUser)))
 	self.router.registerRoute(NewRoute(`/login`, true), self.enableCors(self.login))
+	self.router.registerRoute(NewRoute(`/logout`, true), self.enableCors(self.validateSession(self.logout)))
 
 	fmt.Println("Lisiting on '", self.composeHost(), "'")
 	http.ListenAndServe(self.composeHost(), self.router)
