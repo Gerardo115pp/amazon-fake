@@ -1,9 +1,12 @@
 <script>
     import StoreTopBar from './page-components/StoreTopBar.svelte';
+    import PurcheasModal from './page-components/StoreBuyProductModal.svelte'
     import ProductFeed from './page-components/ProductsFeed.svelte';
     import { onMount } from 'svelte';
     import { server_name } from '../../server_info';
 
+    let selected_product_data = {};
+    let is_purchease_modal_showing = false;
     let feed_products = [];
 
     export let params = {};
@@ -19,6 +22,10 @@
             .then(products => feed_products = products);
     });
 
+    const openPurchaseModal = product_data => {
+        selected_product_data = product_data;
+        is_purchease_modal_showing = true;
+    }
 </script>
 
 <style>
@@ -31,8 +38,11 @@
 </style>
 
 <div id="store-entry-proint">
+    {#if is_purchease_modal_showing}
+        <PurcheasModal product_data={selected_product_data} close={() => is_purchease_modal_showing = false} {session_key}/>
+    {/if}
     <StoreTopBar {session_key}/>
     <main id="store-main-content">
-        <ProductFeed products={feed_products}/>
+        <ProductFeed openProduct={openPurchaseModal} products={feed_products}/>
     </main>
 </div>

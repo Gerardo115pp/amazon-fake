@@ -13,6 +13,7 @@ type User struct {
 	email    string
 	address  string
 	password uint64
+	cart     []*Purchase
 }
 
 func (self *User) String() string {
@@ -45,6 +46,7 @@ func (self *User) load(rstring string) error {
 		self.email = values[4]
 		self.address = values[5]
 		self.password = stringToUint64(values[6])
+		self.cart = make([]*Purchase, 0)
 		return nil
 	} else {
 		return fmt.Errorf("User requires 7 values but rstring '%s' had only %d", rstring, len(values))

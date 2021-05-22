@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"mime/multipart"
@@ -47,6 +48,7 @@ func (self *Server) createUserFromRequest(request *http.Request) *User {
 	new_user.email = request.FormValue("email")
 	new_user.address = request.FormValue("address")
 	new_user.password = shaAsInt64(request.FormValue("password"))
+	new_user.cart = make([]*Purchase, 0)
 	return new_user
 }
 
@@ -110,6 +112,101 @@ func (self *Server) getUserFromRequest(request *http.Request) (*User, error) {
 	}
 }
 
+func (self *Server) getUserStash(response http.ResponseWriter, request *http.Request) {
+	var user *User
+	user, _ = self.getUserFromRequest(request)
+	var user_stash int = self.state.calculateUserStash(user.id)
+	response.WriteHeader(200)
+	response.Write(self.composeJson("response", fmt.Sprint(user_stash)))
+}
+
+func (self *Server) handleCart(response http.ResponseWriter, request *http.Request) {
+	var buyer *User
+	buyer, _ = self.getUserFromRequest(request)
+	switch request.Method {
+	case http.MethodGet:
+		var serialize_cart []string = make([]string, 0)
+		for _, p := range buyer.cart {
+			serialize_cart = append(serialize_cart, p.toJson())
+		}
+		response.WriteHeader(200)
+		fmt.Fprintf(response, "[%s]", strings.Join(serialize_cart, ","))
+	case http.MethodPost:
+		var product_id uint = uint(stringToInt(request.FormValue("product_id")))
+		var count int = stringToInt(request.FormValue("count"))
+		var product *Product = self.state.getProductById(product_id)
+		if product == nil {
+			response.WriteHeader(400)
+			response.Write(self.composeError("product doesnt exists"))
+			return
+		}
+		buyer.cart = append(buyer.cart, &Purchase{product: product, count: count})
+
+		fmt.Printf("%d '%s' was added to cart of %s\n", count, product.name, buyer.username)
+		response.WriteHeader(200)
+		response.Write(self.ok)
+	case http.MethodDelete:
+		// clearing cart
+		var product_id uint = uint(stringToInt(request.FormValue("id")))
+		var new_cart []*Purchase = make([]*Purchase, 0)
+		for _, p := range buyer.cart {
+			if p.product.id != product_id {
+				new_cart = append(new_cart, p)
+			}
+		}
+		buyer.cart = new_cart
+		var cart_data []string = make([]string, 0)
+		for _, p := range new_cart {
+			cart_data = append(cart_data, p.toJson())
+		}
+
+		response.WriteHeader(200)
+		fmt.Fprintf(response, "[%s]", strings.Join(cart_data, ","))
+	case http.MethodPatch:
+		// performing transacction
+		for _, p := range buyer.cart {
+			p.product.solds += p.count
+		}
+		buyer.cart = buyer.cart[:0]
+		self.state.save()
+		response.WriteHeader(200)
+		response.Write(self.ok)
+	case http.MethodOptions:
+		response.WriteHeader(200)
+		response.Write(self.ok)
+	default:
+		response.WriteHeader(http.StatusMethodNotAllowed)
+		response.Write(self.composeError("nope"))
+	}
+}
+
+func (self *Server) handleProductImages(response http.ResponseWriter, request *http.Request) {
+	if request.Method == http.MethodGet {
+		var product_param string = request.FormValue("id")
+		if product_param != "" {
+			product := self.state.getProductById(uint(stringToInt(product_param)))
+			if product != nil {
+				var images_serialzed []byte
+				images_serialzed, err := json.Marshal(product.images)
+				if err != nil {
+					fmt.Println("Error:", err.Error())
+					response.WriteHeader(500)
+					response.Write(self.composeError("server error, sorry for the inconvinece"))
+					return
+				}
+				response.WriteHeader(200)
+				response.Write(images_serialzed)
+			}
+		} else {
+			response.WriteHeader(400)
+			response.Write(self.composeError("missing product id"))
+		}
+	} else {
+		response.WriteHeader(http.StatusMethodNotAllowed)
+		response.Write(self.composeError("nope"))
+	}
+}
+
 func (self *Server) handleRegister(response http.ResponseWriter, request *http.Request) {
 	if request.Method == http.MethodPost {
 		var new_user *User = self.createUserFromRequest(request)
@@ -137,7 +234,7 @@ func (self *Server) handleProduct(response http.ResponseWriter, request *http.Re
 		var user_selector string = request.FormValue("id")
 		if user_selector == "*" {
 			response.WriteHeader(200)
-			fmt.Fprint(response, self.state.getAllProducts())
+			fmt.Fprint(response, self.state.getAllProducts(vendor.id))
 		} else if user_selector == "" {
 			var vendor_products string = self.state.getProductsByVendor(vendor.id)
 			response.WriteHeader(200)
@@ -191,6 +288,13 @@ func (self *Server) handleUser(response http.ResponseWriter, request *http.Reque
 		response.WriteHeader(http.StatusMethodNotAllowed)
 		fmt.Fprintf(response, "Method '%s' not allowed", request.Method)
 	}
+}
+
+func (self *Server) handleFileSystem(response http.ResponseWriter, request *http.Request) {
+	var file_path string = request.URL.RequestURI()
+	fmt.Println(file_path)
+	response.WriteHeader(200)
+	response.Write(self.ok)
 }
 
 func (self *Server) login(response http.ResponseWriter, request *http.Request) {
@@ -297,13 +401,19 @@ func (self *Server) run() {
 		logFatal(err)
 	}
 
+	var file_system http.Handler = http.FileServer(http.Dir("./product_images"))
+
 	self.router.registerRoute(NewRoute("/", true), self.enableCors(self.greet))
 	self.router.registerRoute(NewRoute(`/register-root-[a-z\d]{3,8}-[a-z\d]+`, false), (self.registerUser))
 	self.router.registerRoute(NewRoute("/register", true), self.enableCors(self.handleRegister))
 	self.router.registerRoute(NewRoute("/products", true), self.enableCors(self.validateSession(self.handleProduct)))
+	self.router.registerRoute(NewRoute("/products-images", true), self.enableCors(self.validateSession(self.handleProductImages)))
+	self.router.registerRoute(NewRoute(`/cart`, true), self.enableCors(self.validateSession(self.handleCart)))
 	self.router.registerRoute(NewRoute("/user", true), self.enableCors(self.validateSession(self.handleUser)))
+	self.router.registerRoute(NewRoute("/user-stash", true), self.enableCors(self.validateSession(self.getUserStash)))
 	self.router.registerRoute(NewRoute(`/login`, true), self.enableCors(self.login))
 	self.router.registerRoute(NewRoute(`/logout`, true), self.enableCors(self.validateSession(self.logout)))
+	self.router.registerRoute(NewRoute(`/static/.+`, false), self.enableCors(http.StripPrefix("/static/", file_system).ServeHTTP))
 
 	fmt.Println("Lisiting on '", self.composeHost(), "'")
 	http.ListenAndServe(self.composeHost(), self.router)

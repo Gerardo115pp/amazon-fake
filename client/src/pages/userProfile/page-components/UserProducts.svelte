@@ -28,7 +28,7 @@
     {#each products as p}
         <div class="user-product-container">
             <span class="product-name">{p.name}</span>
-            <span class="product-price">{p.price} MXN</span>
+            <span class="product-price">{p.price.toLocaleString('en')} MXN</span>
             <span class="product-sales">{p.solds}/{p.stock}</span>
         </div>
     {/each}

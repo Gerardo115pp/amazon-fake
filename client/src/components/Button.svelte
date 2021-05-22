@@ -5,6 +5,8 @@
     export let onClick = () => {};
     export let isDanger = false;
     export let width = "100%";
+    export let button_color = "var(--theme-color)";
+
 
     const composeClassName = () => {
         let class_name = "control-btn"
@@ -40,13 +42,16 @@
     .control-btn {
         font-family: var(--main-font);
         cursor: pointer;
-        background-color: var(--theme-color);
         color: var(--dark-color);
         text-align: center;
         padding: 0 5%;
         border: none;
         border-radius: 15px;
         transition: all .4s ease-in-out;
+    }
+
+    .control-btn:hover {
+        filter: brightness(1.7);
     }
 
     .control-btn.red {
@@ -76,7 +81,7 @@
 
 </style>
 
-<div style="width: {width};" on:click={isEnabled ?  onClick : ()=>{}}
+<div style="width: {width}; background: {button_color};" on:click={isEnabled ?  onClick : ()=>{}}
     class={composeClassName()}>
         {label}
 </div>

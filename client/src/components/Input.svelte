@@ -41,7 +41,12 @@
         display: flex;
         border: 2px solid var(--theme-color);
         border-radius: 9999px;
+        align-items: center;
     }   
+
+    .input-container label {
+        margin-left: 1vw;
+    }
 
     .input-container input {
         font-family: var(--main-font);
@@ -57,8 +62,9 @@
     }
 
     .input-container input[type='number'] {
-        width: 3rem;
+        width: 5rem;
         text-align: center;
+        -moz-appearance: textfield;
     }
 
     .input-container input::placeholder {
@@ -66,6 +72,13 @@
         color: var(--dimtheme-color);
         text-transform: capitalize;
     }
+
+    input::-webkit-outer-spin-button,
+    input::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+
 
 </style>
 

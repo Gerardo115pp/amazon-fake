@@ -26,14 +26,25 @@ func (self *State) composeTag(content string, tag_name string) string {
 	return fmt.Sprintf("<%s>%s</%s>", tag_name, content, tag_name)
 }
 
-func (self *State) getAllProducts() string {
-	var all_products []string = self.products.mapFunc(func(ln *ListNode) string {
-		if ln.NodeContent.(*Product).isAvaliable() {
-			return ln.NodeContent.toJson()
-		} else {
-			return ""
+func (self *State) calculateUserStash(user_id uint) int {
+	var stash int = 0
+	var current_product *Product
+	for current_node := self.products.root; current_node != nil; current_node = current_node.Next {
+		current_product = current_node.NodeContent.(*Product)
+		if current_product.vendor == user_id {
+			stash += current_product.solds * current_product.price
 		}
-	})
+	}
+	return stash
+}
+
+func (self *State) getAllProducts(vendor_id uint) string {
+	var all_products []string
+	for currrent_node := self.products.root; currrent_node != nil; currrent_node = currrent_node.Next {
+		if currrent_node.NodeContent.(*Product).isAvaliable() && currrent_node.NodeContent.(*Product).vendor != vendor_id {
+			all_products = append(all_products, currrent_node.NodeContent.toJson())
+		}
+	}
 	return fmt.Sprintf("[%s]", strings.Join(all_products, ","))
 }
 
@@ -57,6 +68,15 @@ func (self *State) getTagContent(tag_name string) string {
 	var open_tag, close_tag *MatchRange = self.getPairTags(tag_name)
 	var tag_content string = string(self.storage_file.readFrom(open_tag.right+1, close_tag.left))
 	return tag_content
+}
+
+func (self *State) getProductById(product_id uint) *Product {
+	for current_node := self.products.root; current_node != nil; current_node = current_node.Next {
+		if current_node.NodeContent.getId() == product_id {
+			return current_node.NodeContent.(*Product)
+		}
+	}
+	return nil
 }
 
 func (self *State) getUserByUsername(username string) *User {
@@ -158,6 +178,17 @@ func (self *State) startState(root_user *User) {
 	self.clearState()
 	self.users.append(root_user)
 	self.storage_file.clear()
+}
+
+func (self *State) save() {
+	// saveing users
+	if err := self.saveTag(self.users, USERS_TAG); err != nil {
+		logFatal(err)
+	}
+	// saveing products
+	if err := self.saveTag(self.products, PRODUCTS_TAG); err != nil {
+		logFatal(err)
+	}
 }
 
 func (self *State) saveServerData() error {

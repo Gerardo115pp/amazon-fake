@@ -1,6 +1,7 @@
 <script>
     
     import user_profile_logo from '../../../resources/man.svg';
+    import cart_svg from '../../../resources/cart.svg';
     import { push } from 'svelte-spa-router';
 
     export let session_key = "";
@@ -9,7 +10,7 @@
 <style>
     #control-navbar {
         display: flex;
-        background-color: var(--theme-color);
+        background: var(--theme-gradiant);
         height: 7vh;
         justify-content: space-between;
         align-items: center;
@@ -31,18 +32,22 @@
         outline: none;
     }
 
-    #profile-link {
+    #cn-controls {
+        display: flex;
+    }
+
+    .link-container {
         width: 2.3vw;
         margin-right: 5vw;
     }
 
-    #profile-link span{
+    .link-container span{
         cursor: pointer;
         display: flex;
         align-items: center;
     }
 
-    :global(#profile-link svg) { 
+    :global(.link-container svg) { 
         fill: white;
     }
 </style>
@@ -51,9 +56,14 @@
     <div id="cn-searchbar" class="cn-item">
         <input placeholder="search" type="search">
     </div>
-    <div class="controls cn-item">
-        <div on:click={() => push(`/profile/${session_key}`)} id="profile-link">
-            <span class="profile-logo">
+    <div id="cn-controls" class="controls cn-item">
+        <div on:click={() => push(`/cart/${session_key}`)} class="link-container" id="cart-link">
+            <span id="cart-logo">
+                {@html cart_svg}
+            </span>
+        </div>
+        <div on:click={() => push(`/profile/${session_key}`)} class="link-container" id="profile-link">
+            <span id="profile-logo">
                 {@html user_profile_logo}
             </span>
         </div>

@@ -10,6 +10,7 @@
     let is_porduct_modal_showing = false;
     let user_products = [];
     let user_data = {};
+    let user_stash = 0;
 
     onMount(async () => {
         const headers = new Headers();
@@ -21,7 +22,24 @@
         
         // getting user products
         requestUserProducts();
+
+        // getting user stash
+        requestUserStash();
     });
+
+    const requestUserStash = () => {
+        const headers = new Headers();
+        headers.set("X-sk", session_key);
+
+        const request = new Request(`http://${server_name}/user-stash`, { method: 'GET', headers: headers});
+        fetch(request)
+            .then(promise => promise.json())
+            .then(response => {
+                if (response.response) {
+                    user_stash = response.response;
+                }
+            });
+    }
 
     const requestUserProducts = () => {
         const headers = new Headers();
@@ -49,6 +67,19 @@
         justify-content: center;
         align-items: center;
     }
+
+    #user-profile-panel {
+        width: 70vw;
+    }
+
+    #user-profile-status-bar {
+        display: flex;
+        height: 10vh;
+        font-size: 1.2rem;
+        font-weight: bolder;
+        padding: 0 4vw;
+        align-items: center;
+    }
 </style>
 
 <div id="user-profile-page">
@@ -57,11 +88,15 @@
     {/if}
     <UserProfileHeader {session_key} {user_data} {closeProductModal}/>
     <main id="user-profile-main">
+        <div id="user-profile-panel">
+            <div id="user-profile-status-bar">
+                <span id="user-stash">
+                    Earning: ${user_stash.toLocaleString('en')} MXN
+                </span>
+            </div>
+        </div>
         <aside id="profile-data">
             <UserProducts products={user_products}/>
         </aside>
-        <div id="user-profile-panel">
-            
-        </div>
     </main>
 </div>

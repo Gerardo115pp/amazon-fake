@@ -1,5 +1,6 @@
 <script>
     export let products = [];
+    export let openProduct = () => {};
 </script>
 
 <style>
@@ -13,12 +14,14 @@
     }
 
     .product-container {
+        cursor: pointer;
         display: flex;
         background: var(--theme-color);
         color: white;
         padding: 1vh 1vw;
         margin: 1vh 0;
         justify-content: space-around;
+        border-radius: 5px;
     }
 </style>
 
@@ -28,7 +31,7 @@
     </div>
     <div id="feed-container">
         {#each products as p}
-            <div class="product-container">
+            <div on:click={() => openProduct(p)} class="product-container">
                 <span class="product-name">{p.name}</span>
                 <span class="product-stock">{p.solds}/{p.stock}</span>
             </div>

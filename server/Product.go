@@ -66,5 +66,5 @@ func (self *Product) load(rstring string) error {
 }
 
 func (self *Product) toJson() string {
-	return fmt.Sprintf("{ \"id\": \"%d\", \"name\": \"%s\", \"description\": \"%s\", \"stock\": \"%d\", \"solds\": \"%d\", \"price\": \"%d\"}", self.id, self.name, self.description, self.stock, self.solds, self.price)
+	return fmt.Sprintf("{ \"id\": %d, \"name\": \"%s\", \"description\": \"%s\", \"stock\": %d, \"solds\": %d, \"price\": %d}", self.id, self.name, self.description, self.stock, self.solds, self.price)
 }
