@@ -1,0 +1,16 @@
+version: "3.7"
+
+services: 
+    server:
+        image: defalt115/amazon-fake-server:v2
+        volumes: 
+            - .:/go/src/app
+        environment: 
+            GSERVER_PORT: 5006
+            GSERVER_HOST: 0.0.0.0
+        ports:
+            - 5006:5006
+    client:
+        image: defalt115/amazon-fake-client:v1
+        ports: 
+            - 5002:5002

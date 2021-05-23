@@ -130,6 +130,7 @@ func (self *State) loadState() error {
 
 func (self *State) loadServerData() error {
 	var server_data string = self.getTagContent(SERVER_DATA_TAG)
+
 	server_data_json := &struct {
 		LastUserID int `json:"last_user_id"`
 		LastItemID int `json:"last_item_id"`
@@ -158,10 +159,10 @@ func (self *State) loadUsers() (err error) {
 }
 
 func (self *State) loadProducts() (err error) {
-	var users_data string = self.getTagContent(PRODUCTS_TAG)
+	var products_data string = self.getTagContent(PRODUCTS_TAG)
 	var current_product *Product
-	if users_data != "" {
-		for _, rstring := range strings.Split(users_data, "*") {
+	if products_data != "" {
+		for _, rstring := range strings.Split(products_data, "*") {
 			current_product = new(Product)
 			if err = current_product.load(rstring); err != nil {
 				fmt.Printf("Warning rstring '%s' couldnt be loaded...\n", rstring)
@@ -213,6 +214,7 @@ func (self *State) saveTag(state_list *List, tag_name string) error {
 		var tag_serialized []string = state_list.mapFunc(func(ln *ListNode) string { return ln.NodeContent.toRstring() })
 
 		self.saveServerData()
+		open_tag, close_tag = self.getPairTags(tag_name)
 		return self.saveContentToRAF(open_tag, close_tag, self.composeTag(strings.Join(tag_serialized, "*"), tag_name))
 	} else {
 		return fmt.Errorf("tag '%s' doesnt exists", tag_name)
@@ -248,6 +250,15 @@ func createState() *State {
 	new_state.users = new(List)
 	new_state.products = new(List)
 	new_state.storage_file = createRAF("store")
+	if new_state.storage_file.Size() == 0 {
+		var base_content string
+		base_content += fmt.Sprintf("<%s>{\"last_user_id\": 0, \"last_item_id\": 0}</%s>", SERVER_DATA_TAG, SERVER_DATA_TAG)
+		base_content += fmt.Sprintf("<%s></%s>", USERS_TAG, USERS_TAG)
+		base_content += fmt.Sprintf("<%s></%s>", PRODUCTS_TAG, PRODUCTS_TAG)
+
+		new_state.storage_file.truncate(int64(len(base_content)), true)
+		new_state.storage_file.write(base_content)
+	}
 
 	return new_state
 }

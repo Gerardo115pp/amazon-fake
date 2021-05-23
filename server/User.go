@@ -3,17 +3,20 @@ package main
 import (
 	"fmt"
 	"strings"
+
+	"github.com/gorilla/websocket"
 )
 
 type User struct {
-	id       uint
-	username string
-	name     string
-	phone    string
-	email    string
-	address  string
-	password uint64
-	cart     []*Purchase
+	id         uint
+	username   string
+	name       string
+	phone      string
+	email      string
+	address    string
+	password   uint64
+	cart       []*Purchase
+	connection *websocket.Conn
 }
 
 func (self *User) String() string {
@@ -55,4 +58,10 @@ func (self *User) load(rstring string) error {
 
 func (self *User) toJson() string {
 	return fmt.Sprintf("{ \"username\": \"%s\", \"name\": \"%s\", \"phone\": \"%s\", \"email\": \"%s\", \"address\": \"%s\"}", self.username, self.name, self.phone, self.email, self.address)
+}
+
+func (self *User) write(message []byte) {
+	if err := self.connection.WriteMessage(websocket.TextMessage, message); err != nil {
+		fmt.Println("FAIL: couldnt transmit message to user:", self.name)
+	}
 }

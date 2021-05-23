@@ -7,11 +7,11 @@
     import { push } from 'svelte-spa-router';
     
     let form_inputs = [
-        new FieldData("newuser-username", /[a-z_\d]+/g, "username"),
-        new FieldData("newuser-name", /[a-z_\d]+/g, "name"),
-        new FieldData("newuser-phone", /[\d-]+/g, 'phone',"tel"),
-        new FieldData("newuser-email", /[\d-]+/g, "email","email"),
-        new FieldData("newuser-address", /[a-z_\s#\d]+/g, "address"),
+        new FieldData("newuser-username", /^[a-z_\d]+$/g, "username"),
+        new FieldData("newuser-name", /^[A-Za-z_\s\d]+$/g, "name"),
+        new FieldData("newuser-phone", /^[\d-]+$/g, 'phone',"tel"),
+        new FieldData("newuser-email", /^[a-zA-Z\d_\.]+@[a-zA-Z]+(.[a-zA-Z])+$/g, "email","email"),
+        new FieldData("newuser-address", /^[a-z_\s#\d]+$/g, "address"),
         new FieldData("newuser-password", /[^\s\n]+/g, "password","password")
     ];
 

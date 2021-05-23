@@ -3,3 +3,9 @@
 server/product_images/
 /**/store
 README.txt
+server/current_server_state.zip
+server/go.sum
+server/go.mod
+client/.vscode/launch.json
+client/.vscode/tasks.json
+server/gserver

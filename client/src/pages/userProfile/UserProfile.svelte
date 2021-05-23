@@ -1,7 +1,8 @@
 <script>
     import AddProductModal from './page-components/AddProductModal.svelte';
     import UserProfileHeader from './page-components/UserProfileHeader.svelte';
-    import UserProducts from './page-components/UserProducts.svelte'
+    import UserProducts from './page-components/UserProducts.svelte';
+    import { user_events } from '../../events';
     import { server_name } from '../../server_info';
     import { onMount } from 'svelte';
     export let params = {};
@@ -25,7 +26,12 @@
 
         // getting user stash
         requestUserStash();
+
+        // setting event lisenters
+        setEventLisenters();
     });
+
+    const closeProductModal = () => is_porduct_modal_showing = !is_porduct_modal_showing
 
     const requestUserStash = () => {
         const headers = new Headers();
@@ -50,7 +56,9 @@
             .then(products => user_products = products);
     }
 
-    const closeProductModal = () => is_porduct_modal_showing = !is_porduct_modal_showing
+    const setEventLisenters = () => {
+        window.addEventListener(user_events.PRODUCTS_CHANGED, requestUserProducts);
+    }    
 
 </script>
 
@@ -96,7 +104,7 @@
             </div>
         </div>
         <aside id="profile-data">
-            <UserProducts products={user_products}/>
+            <UserProducts {session_key} products={user_products}/>
         </aside>
     </main>
 </div>

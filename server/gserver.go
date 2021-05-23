@@ -9,17 +9,34 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/gorilla/websocket"
 )
 
 const PRODUCT_IMAGES_DIRECTORY = "./product_images"
 
 type Server struct {
-	port     string
-	host     string
-	router   *Router
-	state    *State
-	sessions map[uint64]*User
-	ok       []byte
+	port      string
+	host      string
+	router    *Router
+	state     *State
+	sessions  map[uint64]*User
+	trasmisor *websocket.Upgrader
+	ok        []byte
+}
+
+func (self *Server) broadcastProductChange(caller *User) {
+	fmt.Println("Broadcasting product change by caller:", caller.username)
+	var messages_sent uint = 0
+	for _, user := range self.sessions {
+		if user.id != caller.id && user.connection != nil {
+			messages_sent++
+			user.write(self.composeJson("message", "\"update\""))
+		}
+	}
+	if messages_sent > 0 {
+		fmt.Println("Messages sent:", messages_sent)
+	}
 }
 
 func (self *Server) createSession(user *User, request *http.Request) uint64 {
@@ -72,7 +89,7 @@ func (self *Server) enableCors(handler func(http.ResponseWriter, *http.Request))
 	return func(response http.ResponseWriter, request *http.Request) {
 		response.Header().Set("Access-Control-Allow-Origin", "*")
 		response.Header().Set("Access-Control-Allow-Headers", "X-sk")
-		response.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PATCH, DELETE")
+		response.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PATCH, DELETE, CONNECT")
 		if request.Method == http.MethodOptions {
 			response.WriteHeader(200)
 			response.Write(self.ok)
@@ -207,6 +224,61 @@ func (self *Server) handleProductImages(response http.ResponseWriter, request *h
 	}
 }
 
+func (self *Server) handleProductsFeedSuscription(response http.ResponseWriter, request *http.Request) {
+
+	switch request.Method {
+	case http.MethodGet:
+
+		if request.URL.Query().Get("sk") != "" {
+			var session_key string = request.URL.Query().Get("sk")
+			request.Header.Add("X-sk", session_key)
+
+			var user *User
+			user, _ = self.getUserFromRequest(request)
+			if user == nil {
+				fmt.Printf("Session key %s yielded no valid session\n", session_key)
+				response.WriteHeader(http.StatusNonAuthoritativeInfo)
+				response.Write(self.composeError("invalid credentials"))
+
+				return
+			}
+
+			var connection *websocket.Conn
+
+			connection, err := self.trasmisor.Upgrade(response, request, nil)
+			if err != nil {
+				fmt.Println("Coulnt stablish a connection with")
+			}
+
+			fmt.Printf("user %s suscribed to products feed\n", user.username)
+			user.connection = connection
+
+		} else {
+			response.WriteHeader(400)
+			response.Write(self.composeError("missing credentials"))
+		}
+
+		// transmisor.Upgrade already responded
+	case http.MethodDelete:
+		var user *User
+		user, _ = self.getUserFromRequest(request)
+		if user.connection != nil {
+			user.connection.Close()
+			user.connection = nil
+			fmt.Println("Unsuscribed user:", user.username)
+		} else {
+			response.WriteHeader(http.StatusNotAcceptable)
+			response.Write(self.composeError("user was not suscribed"))
+		}
+	case http.MethodOptions:
+		response.WriteHeader(200)
+		response.Write(self.ok)
+	default:
+		response.WriteHeader(http.StatusMethodNotAllowed)
+		response.Write(self.composeError("nope"))
+	}
+}
+
 func (self *Server) handleRegister(response http.ResponseWriter, request *http.Request) {
 	if request.Method == http.MethodPost {
 		var new_user *User = self.createUserFromRequest(request)
@@ -229,6 +301,7 @@ func (self *Server) handleRegister(response http.ResponseWriter, request *http.R
 func (self *Server) handleProduct(response http.ResponseWriter, request *http.Request) {
 	var vendor *User
 	vendor, _ = self.getUserFromRequest(request)
+
 	switch request.Method {
 	case http.MethodGet:
 		var user_selector string = request.FormValue("id")
@@ -264,6 +337,31 @@ func (self *Server) handleProduct(response http.ResponseWriter, request *http.Re
 		self.state.insertProduct(new_product)
 		response.WriteHeader(200)
 		response.Write(self.ok)
+		self.broadcastProductChange(vendor)
+	case http.MethodPatch:
+		if request.FormValue("product_id") != "" && request.FormValue("restock_by") != "" {
+			var product_id uint = uint(stringToInt(request.FormValue("product_id")))
+			var restock_by int = stringToInt(request.FormValue("restock_by"))
+			var target_product *Product = self.state.getProductById(product_id)
+			if target_product.vendor == vendor.id {
+				fmt.Printf("restocking '%s' by %d\n", target_product.name, restock_by)
+				target_product.stock += restock_by
+
+				self.state.save()
+
+				fmt.Println("succes!, stock is now:", target_product.stock)
+				response.WriteHeader(200)
+				response.Write(self.ok)
+			} else {
+				response.WriteHeader(http.StatusUnauthorized)
+				response.Write(self.composeError("nope"))
+			}
+
+		} else {
+			response.WriteHeader(http.StatusBadRequest)
+			response.Write(self.composeError("missing parameters"))
+		}
+		self.broadcastProductChange(vendor)
 	case http.MethodOptions:
 		response.WriteHeader(200)
 		response.Write(self.ok)
@@ -370,6 +468,18 @@ func (self *Server) sessionExists(sk string) bool {
 	return exists
 }
 
+func (self *Server) setTrasmisor() *websocket.Upgrader {
+	var new_transmisor *websocket.Upgrader = new(websocket.Upgrader)
+	new_transmisor.ReadBufferSize = 512
+	new_transmisor.WriteBufferSize = 512
+	new_transmisor.CheckOrigin = func(r *http.Request) bool {
+		fmt.Printf("\n%s %s%s %v\n", r.Method, r.Host, r.RequestURI, r.Proto)
+		return true
+	}
+
+	return new_transmisor
+}
+
 func (self *Server) saveFile(file multipart.File, filename string) error {
 	data, err := ioutil.ReadAll(file)
 	if err != nil {
@@ -381,6 +491,10 @@ func (self *Server) saveFile(file multipart.File, filename string) error {
 		}
 	}
 	return ioutil.WriteFile(fmt.Sprintf("%s/%s", PRODUCT_IMAGES_DIRECTORY, filename), data, 0666)
+}
+
+func (self *Server) handleUnsuscribe() {
+
 }
 
 func (self *Server) validateSession(handler func(http.ResponseWriter, *http.Request)) func(http.ResponseWriter, *http.Request) {
@@ -407,6 +521,7 @@ func (self *Server) run() {
 	self.router.registerRoute(NewRoute(`/register-root-[a-z\d]{3,8}-[a-z\d]+`, false), (self.registerUser))
 	self.router.registerRoute(NewRoute("/register", true), self.enableCors(self.handleRegister))
 	self.router.registerRoute(NewRoute("/products", true), self.enableCors(self.validateSession(self.handleProduct)))
+	self.router.registerRoute(NewRoute("/products-feed", true), self.enableCors(self.handleProductsFeedSuscription))
 	self.router.registerRoute(NewRoute("/products-images", true), self.enableCors(self.validateSession(self.handleProductImages)))
 	self.router.registerRoute(NewRoute(`/cart`, true), self.enableCors(self.validateSession(self.handleCart)))
 	self.router.registerRoute(NewRoute("/user", true), self.enableCors(self.validateSession(self.handleUser)))
@@ -435,7 +550,7 @@ func createServer(port int) *Server {
 	new_server.sessions = make(map[uint64]*User)
 	new_server.host = server_host
 	new_server.port = server_port
-
+	new_server.trasmisor = new_server.setTrasmisor()
 	new_server.ok = new_server.composeResponse("\"ok\"")
 
 	return new_server
